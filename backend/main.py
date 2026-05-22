@@ -42,18 +42,19 @@ POSSIBLE_FONTS = [
 ]
 
 FONT_PATH = next((f for f in POSSIBLE_FONTS if os.path.exists(f)), None)
+HAS_UNICODE_FONT = bool(FONT_PATH)
 
 class PDFBook(FPDF):
     def __init__(self):
         super().__init__()
-        if FONT_PATH:
+        if HAS_UNICODE_FONT:
             self.add_font("CustomArial", "", FONT_PATH)
             self.set_font("CustomArial", size=12)
         else:
             self.set_font("Arial", size=12)
 
     def header(self):
-        if "CustomArial" in self.fonts:
+        if HAS_UNICODE_FONT:
             self.set_font("CustomArial", size=10)
             self.cell(0, 10, 'Наследие: Твоя История', 0, 1, 'R')
         else:
@@ -119,7 +120,7 @@ def _polish_chapter_text(chapter_answers):
 
 
 def _write_text(pdf, text, size=12):
-    if "CustomArial" in pdf.fonts:
+    if HAS_UNICODE_FONT:
         pdf.set_font("CustomArial", size=size)
         pdf.multi_cell(0, 10, txt=text)
     else:
@@ -128,7 +129,7 @@ def _write_text(pdf, text, size=12):
 
 
 def _write_heading(pdf, text, size, align='L'):
-    if "CustomArial" in pdf.fonts:
+    if HAS_UNICODE_FONT:
         pdf.set_font("CustomArial", size=size)
         pdf.multi_cell(0, size * 0.6 + 6, txt=text, align=align)
     else:
@@ -143,13 +144,6 @@ async def generate_book(data: GenerateBookRequest):
         print(f"Глав с ответами: {len(data.chapters)}")
 
         pdf = PDFBook()
-
-        # Титульная страница
-        pdf.add_page()
-        pdf.ln(40)
-        _write_heading(pdf, data.bookTitle, size=26, align='C')
-        pdf.ln(10)
-
         polished_sections = []
 
         for chapter in data.chapters:
@@ -162,10 +156,10 @@ async def generate_book(data: GenerateBookRequest):
             polished = _polish_chapter_text(chapter_answers).strip()
             polished_sections.append(f"{chapter_title}\n\n{polished}")
 
-            # Каждая глава с новой страницы
+            # Каждая глава с новой страницы — заголовок и текст идут на той же странице.
             pdf.add_page()
             _write_heading(pdf, chapter_title, size=20)
-            pdf.ln(6)
+            pdf.ln(4)
             _write_text(pdf, polished)
 
             # Фотографии главы — сразу под её текстом
