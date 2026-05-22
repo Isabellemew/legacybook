@@ -56,14 +56,40 @@ const Questions = () => {
       const answers = [];
       qSnap.forEach(d => answers.push(d.data()));
 
-      // 2. Отправляем на ИИ-полировку
+      // 2. Группируем по главам, сохраняя порядок из questions.json
+      const lang = (i18n.language || 'ru').split('-')[0];
+      const answerByQuestion = new Map(answers.map(a => [a.questionId, a]));
+      const chapters = questionsData
+        .map(chap => {
+          const chapterAnswers = chap.questions
+            .filter(q => answerByQuestion.has(q.id))
+            .map(q => {
+              const a = answerByQuestion.get(q.id);
+              return {
+                questionId: q.id,
+                questionText: q.text[lang] || q.text['ru'],
+                text: a.text || '',
+                photoUrls: a.photoUrls || [],
+              };
+            });
+          return chapterAnswers.length > 0
+            ? {
+                chapterId: chap.id,
+                chapterTitle: chap.title[lang] || chap.title['ru'],
+                answers: chapterAnswers,
+              }
+            : null;
+        })
+        .filter(Boolean);
+
+      // 3. Отправляем на ИИ-полировку
       const response = await fetch('http://127.0.0.1:8000/generate-book', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           email: user.email,
           bookTitle: bookData.title,
-          answers: answers
+          chapters: chapters,
         })
       });
 

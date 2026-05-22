@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { db, auth } from '../firebase';
 import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { useAuthState } from 'react-firebase-hooks/auth';
-import { ArrowLeft, ChevronLeft, ChevronRight, Book as BookIcon } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight, Book as BookIcon, Download } from 'lucide-react';
 
 const BookReader = () => {
   const { t, i18n } = useTranslation();
@@ -91,7 +91,20 @@ const BookReader = () => {
       <div className="reader-nav">
         <Link to={`/book/${bookId}`} className="back-link"><ArrowLeft size={18} /> {t('reader.back')}</Link>
         <h2 className="serif">{bookData?.title}</h2>
-        <div className="reader-hint">{t('reader.hint')}</div>
+        <div className="reader-actions">
+          {bookData?.title && (
+            <a
+              className="btn btn-secondary btn-download"
+              href={`http://127.0.0.1:8000/download-book?title=${encodeURIComponent(bookData.title)}`}
+              download={`${bookData.title}.pdf`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              <Download size={16} /> {t('reader.download') || 'Скачать PDF'}
+            </a>
+          )}
+          <div className="reader-hint">{t('reader.hint')}</div>
+        </div>
       </div>
 
       <div className="book-container">
@@ -198,6 +211,8 @@ const BookReader = () => {
         .end-page { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; text-align: center; padding: 4rem; }
         .end-page h2 { color: #1e293b; margin-bottom: 1rem; }
         
+        .reader-actions { display: flex; align-items: center; gap: 1rem; }
+        .btn-download { display: inline-flex; align-items: center; gap: 0.4rem; text-decoration: none; font-size: 0.9rem; padding: 0.55rem 1rem; }
         .reader-hint { font-size: 0.8rem; color: #64748b; font-style: italic; opacity: 0.6; }
 
         @media (max-width: 768px) {

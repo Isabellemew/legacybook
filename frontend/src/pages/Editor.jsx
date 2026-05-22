@@ -33,11 +33,13 @@ const Editor = () => {
       if (docSnap.exists()) {
         const data = docSnap.data();
         setText(data.text || '');
-        setPhotos(data.photoUrls || []);
+        setPhotos((data.photoUrls || []).map(u => ({ url: u, pending: false })));
       }
     };
     if (id && user && bookId) loadAnswer();
   }, [id, user, bookId]);
+
+  const persistedUrls = () => photos.filter(p => !p.pending).map(p => p.url);
 
   const handleSave = async () => {
     if (!user) {
@@ -53,10 +55,10 @@ const Editor = () => {
         bookId: bookId,
         questionId: id,
         text: text,
-        photoUrls: photos,
+        photoUrls: persistedUrls(),
         updatedAt: serverTimestamp(),
       }, { merge: true });
-      
+
       setIsSaved(true);
       setTimeout(() => setIsSaved(false), 3000);
     } catch (error) {
@@ -67,6 +69,30 @@ const Editor = () => {
     }
   };
 
+  const compressImage = (file, maxSize = 1600, quality = 0.85) =>
+    new Promise((resolve, reject) => {
+      const img = new Image();
+      const reader = new FileReader();
+      reader.onload = () => { img.src = reader.result; };
+      reader.onerror = reject;
+      img.onload = () => {
+        const ratio = Math.min(1, maxSize / Math.max(img.width, img.height));
+        const w = Math.round(img.width * ratio);
+        const h = Math.round(img.height * ratio);
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        canvas.toBlob(
+          blob => blob ? resolve(blob) : reject(new Error('compress failed')),
+          'image/jpeg',
+          quality
+        );
+      };
+      img.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+
   const handlePhotoUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -76,14 +102,25 @@ const Editor = () => {
       return;
     }
 
+    const previewUrl = URL.createObjectURL(file);
+    setPhotos(prev => [...prev, { url: previewUrl, pending: true }]);
     setIsUploading(true);
+
     try {
-      const safeName = `${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+      const blob = file.size > 600 * 1024 ? await compressImage(file) : file;
+      const ext = blob.type === 'image/jpeg' ? 'jpg' : (file.name.split('.').pop() || 'jpg');
+      const safeName = `${Date.now()}.${ext}`;
       const storageRef = ref(storage, `answers/${user.uid}/${bookId}/${id}/${safeName}`);
-      await uploadBytes(storageRef, file);
+      await uploadBytes(storageRef, blob);
       const url = await getDownloadURL(storageRef);
-      const nextPhotos = [...photos, url];
-      setPhotos(nextPhotos);
+
+      let finalUrls = [];
+      setPhotos(prev => {
+        const next = prev.map(p => p.url === previewUrl ? { url, pending: false } : p);
+        finalUrls = next.filter(p => !p.pending).map(p => p.url);
+        return next;
+      });
+      URL.revokeObjectURL(previewUrl);
 
       const answerId = `${bookId}_${id}`;
       await setDoc(doc(db, "answers", answerId), {
@@ -91,11 +128,13 @@ const Editor = () => {
         bookId: bookId,
         questionId: id,
         text: text,
-        photoUrls: nextPhotos,
+        photoUrls: finalUrls,
         updatedAt: serverTimestamp(),
       }, { merge: true });
     } catch (error) {
       console.error("Photo upload failed:", error);
+      setPhotos(prev => prev.filter(p => p.url !== previewUrl));
+      URL.revokeObjectURL(previewUrl);
       alert(t('editor.errorUpload') + (error?.message ? `\n${error.message}` : ''));
     } finally {
       setIsUploading(false);
@@ -103,8 +142,21 @@ const Editor = () => {
     }
   };
 
-  const removePhoto = (index) => {
-    setPhotos(prev => prev.filter((_, i) => i !== index));
+  const removePhoto = async (index) => {
+    const target = photos[index];
+    const nextPhotos = photos.filter((_, i) => i !== index);
+    setPhotos(nextPhotos);
+    if (target?.pending) return;
+    if (!user) return;
+    try {
+      const answerId = `${bookId}_${id}`;
+      await setDoc(doc(db, "answers", answerId), {
+        photoUrls: nextPhotos.filter(p => !p.pending).map(p => p.url),
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
+    } catch (err) {
+      console.error("remove photo failed", err);
+    }
   };
 
   if (!question) return <div className="container">{t('editor.notFound')}</div>;
@@ -132,10 +184,11 @@ const Editor = () => {
             
             {photos.length > 0 && (
               <div className="photos-preview">
-                {photos.map((url, i) => (
-                  <div key={i} className="photo-item">
-                    <img src={url} alt="Фото" />
-                    <button onClick={() => removePhoto(i)}><X size={14} /></button>
+                {photos.map((p, i) => (
+                  <div key={p.url + i} className={`photo-item ${p.pending ? 'pending' : ''}`}>
+                    <img src={p.url} alt="Фото" />
+                    {p.pending && <div className="photo-spinner"><Loader2 className="animate-spin" size={20} /></div>}
+                    <button onClick={() => removePhoto(i)} disabled={p.pending}><X size={14} /></button>
                   </div>
                 ))}
               </div>
@@ -168,7 +221,10 @@ const Editor = () => {
         .photos-preview { display: flex; gap: 1rem; padding: 1rem 2rem; overflow-x: auto; background: #f8fafc; border-top: 1px solid #e2e8f0; }
         .photo-item { position: relative; width: 80px; height: 80px; flex-shrink: 0; }
         .photo-item img { width: 100%; height: 100%; object-fit: cover; border-radius: 6px; }
+        .photo-item.pending img { opacity: 0.55; filter: grayscale(20%); }
+        .photo-spinner { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #6366f1; pointer-events: none; }
         .photo-item button { position: absolute; top: -5px; right: -5px; background: #ef4444; color: white; border: none; border-radius: 50%; width: 18px; height: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+        .photo-item button:disabled { opacity: 0.5; cursor: not-allowed; }
         .editor-actions { display: flex; justify-content: flex-end; padding: 1.2rem 2rem; border-top: 1px solid #f1f5f9; background: #fff; border-radius: 0 0 12px 12px; }
         .right-actions { display: flex; gap: 0.8rem; }
         .btn-secondary.is-loading { opacity: 0.7; pointer-events: none; }
