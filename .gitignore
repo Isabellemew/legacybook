@@ -1,12 +1,20 @@
 # Dependencies
 node_modules/
 backend/venv/
+backend/.venv/
 .env
 *.log
 
 # Build
 dist/
 build/
+
+# Firebase
+.firebase/
+
+# Generated PDFs
+book_*.pdf
+backend/book_*.pdf
 
 # IDE
 .vscode/

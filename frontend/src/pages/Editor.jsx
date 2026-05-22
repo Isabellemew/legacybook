@@ -1,20 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Sparkles, Save, ArrowLeft, Image as ImageIcon, Check, X, Loader2 } from 'lucide-react';
+import { Save, ArrowLeft, Image as ImageIcon, Check, X, Loader2 } from 'lucide-react';
 import { useAuthState } from 'react-firebase-hooks/auth';
+import { useTranslation } from 'react-i18next';
 import questionsData from '../data/questions.json';
 import { db, storage, auth } from '../firebase';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 const Editor = () => {
+  const { t, i18n } = useTranslation();
   const { bookId, id } = useParams(); // id - это ID вопроса
   const navigate = useNavigate();
   const [user] = useAuthState(auth);
   const [text, setText] = useState('');
   const [photos, setPhotos] = useState([]);
-  const [isAiLoading, setIsAiLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -40,7 +41,7 @@ const Editor = () => {
 
   const handleSave = async () => {
     if (!user) {
-      alert("Пожалуйста, войдите в систему.");
+      alert(t('editor.pleaseLogin'));
       return;
     }
 
@@ -60,7 +61,7 @@ const Editor = () => {
       setTimeout(() => setIsSaved(false), 3000);
     } catch (error) {
       console.error("Ошибка при сохранении:", error);
-      alert("Не удалось сохранить ответ.");
+      alert(t('editor.errorSave'));
     } finally {
       setIsSaving(false);
     }
@@ -69,17 +70,36 @@ const Editor = () => {
   const handlePhotoUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
+    if (!user) {
+      alert(t('editor.pleaseLogin'));
+      e.target.value = '';
+      return;
+    }
 
     setIsUploading(true);
     try {
-      const storageRef = ref(storage, `answers/${bookId}/${id}/${file.name}`);
+      const safeName = `${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+      const storageRef = ref(storage, `answers/${user.uid}/${bookId}/${id}/${safeName}`);
       await uploadBytes(storageRef, file);
       const url = await getDownloadURL(storageRef);
-      setPhotos(prev => [...prev, url]);
+      const nextPhotos = [...photos, url];
+      setPhotos(nextPhotos);
+
+      const answerId = `${bookId}_${id}`;
+      await setDoc(doc(db, "answers", answerId), {
+        userId: user.uid,
+        bookId: bookId,
+        questionId: id,
+        text: text,
+        photoUrls: nextPhotos,
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
     } catch (error) {
-      alert("Не удалось загрузить фото.");
+      console.error("Photo upload failed:", error);
+      alert(t('editor.errorUpload') + (error?.message ? `\n${error.message}` : ''));
     } finally {
       setIsUploading(false);
+      e.target.value = '';
     }
   };
 
@@ -87,44 +107,25 @@ const Editor = () => {
     setPhotos(prev => prev.filter((_, i) => i !== index));
   };
 
-  const handleAiFix = async () => {
-    if (!text) return;
-    setIsAiLoading(true);
-    try {
-      const response = await fetch('http://127.0.0.1:8000/fix', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text })
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setText(data.fixedText);
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setIsAiLoading(false);
-    }
-  };
-
-  if (!question) return <div className="container">Вопрос не найден</div>;
+  if (!question) return <div className="container">{t('editor.notFound')}</div>;
+  const currentLang = (i18n.language || 'ru').split('-')[0];
+  const questionText = question.text[currentLang] || question.text['ru'];
 
   return (
     <div className="container fade-in">
       <button onClick={() => navigate(`/book/${bookId}`)} className="back-btn">
-        <ArrowLeft size={18} /> К списку вопросов
+        <ArrowLeft size={18} /> {t('editor.back')}
       </button>
 
       <div className="editor-container">
         <header className="editor-header">
-          <h1 className="serif">{question.text}</h1>
+          <h1 className="serif">{questionText}</h1>
         </header>
 
         <div className="editor-main">
           <div className="writing-area card">
             <textarea 
-              placeholder="Начните писать здесь..."
+              placeholder={t('editor.placeholder')}
               value={text}
               onChange={(e) => setText(e.target.value)}
             />
@@ -141,17 +142,14 @@ const Editor = () => {
             )}
 
             <div className="editor-actions">
-              <button className="btn btn-ai" onClick={handleAiFix} disabled={isAiLoading}>
-                {isAiLoading ? <Loader2 className="animate-spin" /> : <><Sparkles size={18} /> Улучшить через ИИ</>}
-              </button>
-              
               <div className="right-actions">
-                <label className="btn btn-secondary cursor-pointer">
-                  <ImageIcon size={18} /> {isUploading ? '...' : 'Фото'}
-                  <input type="file" hidden onChange={handlePhotoUpload} accept="image/*" />
+                <label className={`btn btn-secondary cursor-pointer ${isUploading ? 'is-loading' : ''}`}>
+                  {isUploading ? <Loader2 className="animate-spin" /> : <ImageIcon size={18} />}
+                  {isUploading ? t('editor.uploading') || '...' : t('editor.photo')}
+                  <input type="file" hidden onChange={handlePhotoUpload} accept="image/*" disabled={isUploading} />
                 </label>
                 <button className="btn btn-primary" onClick={handleSave} disabled={isSaving}>
-                  {isSaving ? <Loader2 className="animate-spin" /> : (isSaved ? <><Check size={18} /> Сохранено</> : <><Save size={18} /> Сохранить</>)}
+                  {isSaving ? <Loader2 className="animate-spin" /> : (isSaved ? <><Check size={18} /> {t('editor.saved')}</> : <><Save size={18} /> {t('editor.save')}</>)}
                 </button>
               </div>
             </div>
@@ -171,10 +169,18 @@ const Editor = () => {
         .photo-item { position: relative; width: 80px; height: 80px; flex-shrink: 0; }
         .photo-item img { width: 100%; height: 100%; object-fit: cover; border-radius: 6px; }
         .photo-item button { position: absolute; top: -5px; right: -5px; background: #ef4444; color: white; border: none; border-radius: 50%; width: 18px; height: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
-        .editor-actions { display: flex; justify-content: space-between; padding: 1.2rem 2rem; border-top: 1px solid #f1f5f9; background: #fff; border-radius: 0 0 12px 12px; }
-        .btn-ai { background: linear-gradient(135deg, #6366f1, #a855f7); color: white; border: none; padding: 0.8rem 1.2rem; border-radius: 8px; font-weight: 500; cursor: pointer; display: flex; align-items: center; gap: 0.5rem; }
+        .editor-actions { display: flex; justify-content: flex-end; padding: 1.2rem 2rem; border-top: 1px solid #f1f5f9; background: #fff; border-radius: 0 0 12px 12px; }
         .right-actions { display: flex; gap: 0.8rem; }
+        .btn-secondary.is-loading { opacity: 0.7; pointer-events: none; }
         .cursor-pointer { cursor: pointer; }
+
+        @media (max-width: 768px) {
+          .editor-header h1 { font-size: 1.6rem; }
+          .writing-area textarea { padding: 1.5rem; font-size: 1.1rem; }
+          .editor-actions { flex-direction: column; gap: 1rem; padding: 1rem; }
+          .right-actions { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; }
+          .btn-primary, .btn-secondary { width: 100%; justify-content: center; }
+        }
       `}} />
     </div>
   );

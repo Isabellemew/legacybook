@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Link, useParams, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import questionsData from '../data/questions.json';
 import { ChevronRight, Search, ArrowLeft, CheckCircle, Edit, Save, Send, Loader2, Sparkles } from 'lucide-react';
 import { db, auth } from '../firebase';
@@ -8,6 +9,7 @@ import { collection, query, where, getDocs, doc, updateDoc, serverTimestamp } fr
 import { useAuthState } from 'react-firebase-hooks/auth';
 
 const Questions = () => {
+  const { t, i18n } = useTranslation();
   const { bookId } = useParams();
   const navigate = useNavigate();
   const [user] = useAuthState(auth);
@@ -42,7 +44,7 @@ const Questions = () => {
 
   const handleFinishBook = async () => {
     if (answeredIds.length === 0) {
-      alert("Сначала ответьте хотя бы на один вопрос.");
+      alert(t('questions.atLeastOne'));
       return;
     }
 
@@ -73,15 +75,15 @@ const Questions = () => {
           polishedContent: result.polishedContent,
           finishedAt: serverTimestamp()
         });
-        alert("ИИ завершил редактуру! Книга готова.");
+        alert(t('questions.success'));
         navigate('/profile');
       } else {
         const errData = await response.json().catch(() => ({detail: "Unknown error"}));
-        alert("Ошибка сервера: " + (errData.detail || response.statusText));
+        alert(t('questions.errorServer') + (errData.detail || response.statusText));
       }
     } catch (err) {
       console.error(err);
-      alert("Сетевая ошибка: " + err.message + ". Убедитесь, что бэкенд запущен на http://127.0.0.1:8000");
+      alert(t('questions.errorNetwork') + err.message);
     } finally {
       setIsSending(false);
     }
@@ -89,7 +91,7 @@ const Questions = () => {
 
   const handleSaveHeader = async () => {
     if (!editedTitle.trim()) {
-      alert("Название не может быть пустым");
+      alert(t('questions.titleEmpty'));
       return;
     }
     try {
@@ -101,12 +103,13 @@ const Questions = () => {
       setIsEditingHeader(false);
     } catch (err) {
       console.error(err);
-      alert("Ошибка при сохранении изменений");
+      alert(t('questions.errorSave'));
     }
   };
 
   const allQuestions = questionsData.find(c => c.id === activeChapter)?.questions || [];
-  const filteredQuestions = allQuestions.filter(q => q.text.toLowerCase().includes(searchTerm.toLowerCase()));
+  const currentLang = (i18n.language || 'ru').split('-')[0];
+  const filteredQuestions = allQuestions.filter(q => (q.text[currentLang] || q.text['ru']).toLowerCase().includes(searchTerm.toLowerCase()));
   const finishedQuestions = filteredQuestions.filter(q => answeredIds.includes(q.id));
   const pendingQuestions = filteredQuestions.filter(q => !answeredIds.includes(q.id));
 
@@ -120,8 +123,8 @@ const Questions = () => {
           >
             <div className="ai-loader card">
               <Sparkles className="animate-pulse" size={48} color="#a855f7" />
-              <h2 className="serif">ИИ анализирует вашу книгу...</h2>
-              <p>Мы исправляем ошибки, связываем мысли и создаем плавное повествование. Это займет около минуты.</p>
+              <h2 className="serif">{t('questions.aiTitle')}</h2>
+              <p>{t('questions.aiText')}</p>
               <div className="progress-dots"><span></span><span></span><span></span></div>
             </div>
           </motion.div>
@@ -130,9 +133,9 @@ const Questions = () => {
 
       <header className="page-header card">
         <div className="header-top">
-          <Link to="/profile" className="back-link"><ArrowLeft size={18} /> На полку</Link>
+          <Link to="/profile" className="back-link"><ArrowLeft size={18} /> {t('questions.back')}</Link>
           <button className="btn btn-ai-finish" onClick={handleFinishBook} disabled={isSending}>
-            <Sparkles size={18} /> Готово! Отправить на редакцию
+            <Sparkles size={18} /> {t('questions.finish')}
           </button>
         </div>
         
@@ -156,14 +159,14 @@ const Questions = () => {
               />
               <div className="header-edit-actions">
                 <button className="btn btn-primary btn-sm" onClick={handleSaveHeader}>
-                  <Save size={16} /> Сохранить
+                  <Save size={16} /> {t('questions.save')}
                 </button>
                 <button className="btn btn-ghost btn-sm" onClick={() => {
                   setIsEditingHeader(false);
                   setEditedTitle(bookData.title);
                   setEditedPreface(bookData.preface || '');
                 }}>
-                  Отмена
+                  {t('questions.cancel')}
                 </button>
               </div>
             </div>
@@ -175,7 +178,7 @@ const Questions = () => {
                   <Edit size={18} />
                 </button>
               </div>
-              <p className="preface-text">{bookData?.preface || "Добавьте предисловие, чтобы сделать вашу книгу особенной..."}</p>
+              <p className="preface-text">{bookData?.preface || t('questions.prefaceEmpty')}</p>
             </>
           )}
         </div>
@@ -185,7 +188,7 @@ const Questions = () => {
         <aside className="chapters-nav">
           {questionsData.map(c => (
             <button key={c.id} className={`chapter-link ${activeChapter === c.id ? 'active' : ''}`} onClick={() => setActiveChapter(c.id)}>
-              {c.title}
+              {c.title[currentLang] || c.title['ru']}
             </button>
           ))}
         </aside>
@@ -196,7 +199,7 @@ const Questions = () => {
               <Search size={20} />
               <input 
                 type="text" 
-                placeholder="Поиск по вопросам вашей истории..." 
+                placeholder={t('questions.searchPlaceholder')}
                 value={searchTerm} 
                 onChange={(e) => setSearchTerm(e.target.value)} 
               />
@@ -204,11 +207,11 @@ const Questions = () => {
           </div>
 
           <div className="section">
-            <h3 className="section-title">Нужно ответить ({pendingQuestions.length})</h3>
+            <h3 className="section-title">{t('questions.pending')} ({pendingQuestions.length})</h3>
             <div className="questions-grid">
               {pendingQuestions.map(q => (
                 <Link to={`/book/${bookId}/editor/${q.id}`} key={q.id} className="question-card card">
-                  <p>{q.text}</p>
+                  <p>{q.text[currentLang]}</p>
                   <ChevronRight size={18} />
                 </Link>
               ))}
@@ -217,12 +220,12 @@ const Questions = () => {
 
           {finishedQuestions.length > 0 && (
             <div className="section">
-              <h3 className="section-title">Готовые ответы ({finishedQuestions.length})</h3>
+              <h3 className="section-title">{t('questions.finished')} ({finishedQuestions.length})</h3>
               <div className="questions-grid">
                 {finishedQuestions.map(q => (
                   <Link to={`/book/${bookId}/editor/${q.id}`} key={q.id} className="question-card card finished">
                     <CheckCircle size={18} color="#10b981" />
-                    <p>{q.text}</p>
+                    <p>{q.text[currentLang]}</p>
                     <ChevronRight size={18} />
                   </Link>
                 ))}
@@ -284,10 +287,31 @@ const Questions = () => {
         .animate-pulse { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
         @keyframes pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .7; transform: scale(1.1); } }
 
-        @media (max-width: 900px) {
+        @media (max-width: 1024px) {
           .questions-layout { grid-template-columns: 1fr; }
-          .chapters-nav { position: static; flex-direction: row; overflow-x: auto; padding-bottom: 1rem; }
-          .chapter-link { white-space: nowrap; width: auto; }
+          .chapters-nav { 
+            position: sticky; top: 0; 
+            flex-direction: row; 
+            overflow-x: auto; 
+            padding: 1rem; 
+            background: var(--white); 
+            z-index: 20; 
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+            margin: -1.5rem -1.5rem 2rem -1.5rem;
+            width: calc(100% + 3rem);
+          }
+          .chapter-link { white-space: nowrap; padding: 0.8rem 1.5rem; width: auto; }
+          .questions-header h1 { font-size: 2.2rem; }
+        }
+
+        @media (max-width: 640px) {
+          .questions-container { padding: 1rem; }
+          .questions-header { flex-direction: column; align-items: flex-start; gap: 1rem; }
+          .search-box { width: 100%; }
+          .question-card { padding: 1.5rem; flex-direction: column; align-items: flex-start; gap: 1.5rem; }
+          .question-card p { width: 100%; }
+          .btn-lg { width: 100%; justify-content: center; }
+          .chapters-nav { margin: -1rem -1rem 1.5rem -1rem; width: calc(100% + 2rem); }
         }
       `}} />
     </div>

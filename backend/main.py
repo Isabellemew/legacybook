@@ -124,21 +124,34 @@ async def generate_book(data: GenerateBookRequest):
             pdf.multi_cell(0, 10, txt=book_narrative.encode('latin-1', 'replace').decode('latin-1'))
         
         # Фотографии
-        pdf.add_page()
-        if "CustomArial" in pdf.fonts:
-            pdf.set_font("CustomArial", size=18)
-            pdf.cell(0, 20, txt="Фотоархив", ln=True, align='C')
-        else:
-            pdf.set_font("Arial", size=18)
-            pdf.cell(0, 20, txt="Photo Archive", ln=True, align='C')
-            
-        for ans in data.answers:
-            for photo_url in ans.get('photoUrls', []):
+        all_photos = [(ans.get('questionId'), url)
+                      for ans in data.answers
+                      for url in (ans.get('photoUrls') or [])]
+        print(f"Photos to embed: {len(all_photos)}")
+
+        if all_photos:
+            pdf.add_page()
+            if "CustomArial" in pdf.fonts:
+                pdf.set_font("CustomArial", size=18)
+                pdf.cell(0, 20, txt="Фотоархив", ln=True, align='C')
+            else:
+                pdf.set_font("Arial", size=18)
+                pdf.cell(0, 20, txt="Photo Archive", ln=True, align='C')
+            pdf.ln(5)
+
+            for question_id, photo_url in all_photos:
                 try:
-                    resp = requests.get(photo_url, timeout=10)
-                    pdf.image(BytesIO(resp.content), w=150)
+                    resp = requests.get(photo_url, timeout=15)
+                    resp.raise_for_status()
+                    img_bytes = BytesIO(resp.content)
+                    img_bytes.seek(0)
+                    # запасной шаг: чтобы fpdf не путался с MIME из URL, дадим явное имя
+                    pdf.image(img_bytes, w=150)
                     pdf.ln(10)
-                except: pass
+                    print(f"  [ok] embedded photo for question {question_id}")
+                except Exception as photo_err:
+                    print(f"  [fail] photo for {question_id}: {type(photo_err).__name__}: {photo_err}")
+                    print(f"         url: {photo_url[:120]}...")
 
         file_path = f"book_{data.bookTitle}.pdf".replace(" ", "_")
         pdf.output(file_path)

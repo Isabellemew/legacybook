@@ -1,17 +1,20 @@
 import React, { useState, useEffect, useRef } from 'react';
 import HTMLFlipBook from 'react-pageflip';
 import { useParams, Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { db, auth } from '../firebase';
 import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { ArrowLeft, ChevronLeft, ChevronRight, Book as BookIcon } from 'lucide-react';
 
 const BookReader = () => {
+  const { t, i18n } = useTranslation();
   const { bookId } = useParams();
   const [user] = useAuthState(auth);
   const [bookData, setBookData] = useState(null);
   const [pages, setPages] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const currentLang = (i18n.language || 'ru').split('-')[0];
   const bookRef = useRef();
 
   useEffect(() => {
@@ -81,74 +84,76 @@ const BookReader = () => {
     loadBookContent();
   }, [user, bookId]);
 
-  if (isLoading) return <div className="loading-screen">Открываем книгу...</div>;
+  if (isLoading) return <div className="loading-screen">{t('reader.loading')}</div>;
 
   return (
     <div className="reader-page">
       <div className="reader-nav">
-        <Link to={`/book/${bookId}`} className="back-link"><ArrowLeft size={18} /> К редактированию</Link>
+        <Link to={`/book/${bookId}`} className="back-link"><ArrowLeft size={18} /> {t('reader.back')}</Link>
         <h2 className="serif">{bookData?.title}</h2>
-        <div className="reader-hint">Нажмите на край страницы, чтобы листать</div>
+        <div className="reader-hint">{t('reader.hint')}</div>
       </div>
 
       <div className="book-container">
-        <HTMLFlipBook 
-          width={250} 
-          height={350} 
-          size="stretch"
-          minWidth={200}
-          maxWidth={400}
-          minHeight={280}
-          maxHeight={600}
-          maxShadowOpacity={0.15}
-          showCover={true}
-          mobileScrollSupport={true}
-          ref={bookRef}
-          className="flip-book"
-          useMouseEvents={true}
-          clickEventForward={true}
-        >
-          {pages.map((page, index) => (
-            <div key={index} className={`page page-${page.type}`}>
-              <div className="page-content">
-                {page.type === 'cover' && (
-                  <div className="cover-design">
-                    <BookIcon size={80} className="cover-icon" />
-                    <h1 className="serif">{page.title}</h1>
-                    <div className="cover-footer">Мемуары</div>
-                  </div>
-                )}
+        {pages.length > 0 && (
+          <HTMLFlipBook 
+            width={250} 
+            height={350} 
+            size="stretch"
+            minWidth={200}
+            maxWidth={400}
+            minHeight={280}
+            maxHeight={600}
+            maxShadowOpacity={0.15}
+            showCover={true}
+            mobileScrollSupport={true}
+            ref={bookRef}
+            className="flip-book"
+            useMouseEvents={true}
+            clickEventForward={true}
+          >
+            {pages.map((page, index) => (
+              <div key={index} className={`page page-${page.type}`}>
+                <div className="page-content">
+                  {page.type === 'cover' && (
+                    <div className="cover-design">
+                      <BookIcon size={80} className="cover-icon" />
+                      <h1 className="serif">{page.title}</h1>
+                      <div className="cover-footer">{t('reader.memoirs')}</div>
+                    </div>
+                  )}
 
-                {page.type === 'preface' && (
-                  <div className="preface-page">
-                    <h2 className="serif">Предисловие</h2>
-                    <div className="divider-line"></div>
-                    <p>{page.content}</p>
-                  </div>
-                )}
+                  {page.type === 'preface' && (
+                    <div className="preface-page">
+                      <h2 className="serif">{t('reader.preface')}</h2>
+                      <div className="divider-line"></div>
+                      <p>{page.content}</p>
+                    </div>
+                  )}
 
-                {page.type === 'content' && (
-                  <div className="content-page">
-                    <div className="page-text">{page.text}</div>
-                    {page.photos.length > 0 && (
-                      <div className="page-photos">
-                        {page.photos.map((url, i) => <img key={i} src={url} alt="Memory" />)}
-                      </div>
-                    )}
-                    <div className="page-num">{page.pageNumber}</div>
-                  </div>
-                )}
+                  {page.type === 'content' && (
+                    <div className="content-page">
+                      <div className="page-text">{page.text}</div>
+                      {page.photos.length > 0 && (
+                        <div className="page-photos">
+                          {page.photos.map((url, i) => <img key={i} src={url} alt="Memory" />)}
+                        </div>
+                      )}
+                      <div className="page-num">{page.pageNumber}</div>
+                    </div>
+                  )}
 
-                {page.type === 'end' && (
-                  <div className="end-page">
-                    <h2 className="serif">Конец первой главы</h2>
-                    <p>История продолжается...</p>
-                  </div>
-                )}
+                  {page.type === 'end' && (
+                    <div className="end-page">
+                      <h2 className="serif">{t('reader.end')}</h2>
+                      <p>{t('reader.continue')}</p>
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
-        </HTMLFlipBook>
+            ))}
+          </HTMLFlipBook>
+        )}
       </div>
 
       <style dangerouslySetInnerHTML={{ __html: `
@@ -196,8 +201,27 @@ const BookReader = () => {
         .reader-hint { font-size: 0.8rem; color: #64748b; font-style: italic; opacity: 0.6; }
 
         @media (max-width: 768px) {
-          .page-content { padding: 2rem; }
-          .cover-design h1 { font-size: 2rem; }
+          .reader-nav { 
+            flex-direction: column; 
+            gap: 1rem; 
+            padding: 1rem; 
+            text-align: center;
+          }
+          .reader-nav h2 { font-size: 1.2rem; order: -1; }
+          .reader-nav .back-link { font-size: 0.9rem; }
+          .reader-hint { display: none; } /* Скрываем подсказку на мобильных, чтобы не загромождать */
+          
+          .book-container { padding: 1rem 0; align-items: flex-start; }
+          .page-content { padding: 1.5rem; }
+          
+          .cover-design h1 { font-size: 1.5rem; }
+          .content-page { font-size: 0.9rem; }
+        }
+
+        @media (max-width: 480px) {
+          .reader-nav h2 { font-size: 1.1rem; }
+          .page-content { padding: 1.2rem; }
+          .content-page { font-size: 0.85rem; }
         }
       `}} />
     </div>

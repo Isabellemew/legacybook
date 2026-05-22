@@ -2,11 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { auth, db } from '../firebase';
 import { collection, query, where, getDocs, addDoc, serverTimestamp, deleteDoc, doc } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Book, Plus, Clock, Loader2, Trash2, CheckCircle, User as UserIcon } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import { Book, Plus, Clock, Loader2, Trash2, CheckCircle } from 'lucide-react';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { useNavigate } from 'react-router-dom';
 
 const Profile = () => {
+  const { t } = useTranslation();
   const [user, authLoading] = useAuthState(auth);
   const navigate = useNavigate();
   const [books, setBooks] = useState([]);
@@ -43,14 +45,14 @@ const Profile = () => {
       });
       loadBooks();
     } catch (err) {
-      alert("Ошибка создания");
+      alert(t('profile.errorCreating'));
     } finally {
       setIsCreating(false);
     }
   };
 
-  if (authLoading) return <div className="loading-screen">Загрузка...</div>;
-  if (!user) return <div className="container center">Пожалуйста, войдите</div>;
+  if (authLoading) return <div className="loading-screen">{t('profile.loading')}</div>;
+  if (!user) return <div className="container center">{t('nav.login')}</div>;
 
   const writingBooks = books.filter(b => b.status === 'writing' || !b.status);
   const readyBooks = books.filter(b => b.status === 'ready');
@@ -59,20 +61,19 @@ const Profile = () => {
     <div className="container fade-in profile-page">
       <header className="profile-header card">
         <div className="user-info">
-          <div className="avatar"><UserIcon /></div>
           <div>
-            <h1 className="serif">Моя Библиотека</h1>
+            <h1 className="serif">{t('profile.title')}</h1>
             <p>{user.email}</p>
           </div>
         </div>
-        <button onClick={() => auth.signOut()} className="btn btn-secondary">Выйти</button>
+        <button onClick={() => auth.signOut()} className="btn btn-secondary">{t('nav.logout')}</button>
       </header>
 
       <section className="books-section">
-        <h2 className="serif section-title">В процессе</h2>
+        <h2 className="serif section-title">{t('profile.inProgress')}</h2>
         <div className="books-grid">
           <motion.div whileHover={{ scale: 1.05 }} className="create-book-3d" onClick={createNewBook}>
-            {isCreating ? <Loader2 className="animate-spin" /> : <><Plus size={40} /><span>Новый том</span></>}
+            {isCreating ? <Loader2 className="animate-spin" /> : <><Plus size={40} /><span>{t('profile.newBook')}</span></>}
           </motion.div>
 
           {writingBooks.map(book => (
@@ -81,12 +82,12 @@ const Profile = () => {
                 <div className="book-cover-front">
                   <Book size={40} color="#fbbf24" />
                   <h3 className="serif">{book.title}</h3>
-                  <div className="book-label">Черновик</div>
+                  <div className="book-label">{t('profile.draft')}</div>
                 </div>
               </div>
               <button className="del-btn-mini" onClick={(e) => {
                 e.stopPropagation();
-                if(window.confirm("Удалить?")) deleteDoc(doc(db, "books", book.id)).then(loadBooks);
+                if(window.confirm(t('profile.deleteConfirm'))) deleteDoc(doc(db, "books", book.id)).then(loadBooks);
               }}><Trash2 size={14} /></button>
             </div>
           ))}
@@ -95,7 +96,7 @@ const Profile = () => {
 
       {readyBooks.length > 0 && (
         <section className="books-section">
-          <h2 className="serif section-title">Готовые шедевры</h2>
+          <h2 className="serif section-title">{t('profile.completed')}</h2>
           <div className="books-grid">
             {readyBooks.map(book => (
               <div key={book.id} className="book-3d-wrapper ready" onClick={() => navigate(`/book/${book.id}/read`)}>
@@ -103,12 +104,12 @@ const Profile = () => {
                   <div className="book-cover-front">
                     <CheckCircle size={40} color="#10b981" />
                     <h3 className="serif">{book.title}</h3>
-                    <div className="book-label">Завершено</div>
+                    <div className="book-label">{t('profile.ready')}</div>
                   </div>
                 </div>
                 <button className="del-btn-mini" onClick={(e) => {
                   e.stopPropagation();
-                  deleteDoc(doc(db, "books", book.id)).then(loadBooks);
+                  if(window.confirm(t('profile.deleteConfirm'))) deleteDoc(doc(db, "books", book.id)).then(loadBooks);
                 }}><Trash2 size={14} /></button>
               </div>
             ))}
@@ -155,6 +156,15 @@ const Profile = () => {
         .book-3d-wrapper:hover .del-btn-mini { opacity: 1; }
         
         .center { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 60vh; }
+
+        @media (max-width: 768px) {
+          .profile-header { flex-direction: column; text-align: center; gap: 2rem; padding: 1.5rem; }
+          .section-title { font-size: 1.8rem; margin-bottom: 2rem; }
+          .books-grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 1.5rem; padding: 0 1rem; }
+          .book-3d-wrapper, .create-book-3d { height: 240px; width: 100%; }
+          .book-cover-front h3 { font-size: 1.1rem; }
+          .book-label { padding-top: 1rem; }
+        }
       `}} />
     </div>
   );

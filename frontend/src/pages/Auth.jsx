@@ -90,6 +90,11 @@ const Auth = () => {
         .toggle-auth { margin-top: 1.5rem; color: var(--text-muted); }
         .toggle-auth button { background: transparent; border: none; color: var(--primary); font-weight: 600; cursor: pointer; margin-left: 0.5rem; }
         .error-msg { color: #e63946; font-size: 0.9rem; text-align: left; }
+
+        @media (max-width: 640px) {
+          .auth-container { padding: 1rem; }
+          .auth-card { padding: 2rem 1.5rem; }
+        }
       `}} />
     </div>
   );
